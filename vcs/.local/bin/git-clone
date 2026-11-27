@@ -1,0 +1,63 @@
+#!/bin/sh
+# Clone a git repository into $CODE_DIR/<host>/<path>.
+# Usage: git-clone URL [git clone options...]
+
+set -e
+set -u
+
+case "${1:-}" in
+    -h | --help)
+        printf 'Usage: %s <git-url> [git clone options...]\n' "$0"
+        exit 0
+        ;;
+esac
+
+code_dir="${CODE_DIR:-${HOME}/code}"
+url="${1:?Usage: $0 <git-url> [git clone options...]}"
+shift
+
+case "${url}" in
+    *://*/*)
+        rest="${url#*://}"
+        host="${rest%%/*}"
+        path="${rest#*/}"
+        ;;
+    *://*)
+        printf 'Unsupported URL: %s\n' "${url}" >&2
+        exit 1
+        ;;
+    *:*)
+        host="${url%%:*}"
+        path="${url#*:}"
+        ;;
+    *)
+        printf 'Unsupported URL: %s\n' "${url}" >&2
+        exit 1
+        ;;
+esac
+
+host="${host##*@}" # strip user[:password]@
+host="${host%%:*}" # strip :port
+path="${path%/}"   # strip trailing slash
+path="${path%.git}"
+
+case "${host}" in
+    '' | . | .. | -* | *[!A-Za-z0-9._-]*)
+        printf 'Unsupported host in URL: %s\n' "${url}" >&2
+        exit 1
+        ;;
+esac
+case "/${path}/" in
+    //* | */../* | *[!A-Za-z0-9._/-]*)
+        printf 'Unsupported path in URL: %s\n' "${url}" >&2
+        exit 1
+        ;;
+esac
+
+dest="${code_dir}/${host}/${path}"
+if [ -d "${dest}/.git" ] || [ -f "${dest}/.git" ]; then
+    git -C "${dest}" fetch --all
+else
+    mkdir -p "$(dirname "${dest}")"
+    git clone --origin="${host}" "${@}" -- "${url}" "${dest}"
+fi

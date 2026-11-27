@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#
+# Recursively fetch all git repositories in parallel.
+# Usage: git-fetch [DIRECTORY [JOBS]]
+
+set -o errexit -o nounset -o pipefail
+
+search_dir="${1:-.}"
+jobs="${2:-$(nproc)}"
+
+if [[ ! -d "${search_dir}" ]]; then
+    echo "Directory does not exist: ${search_dir}" >&2
+    exit 1
+fi
+
+# .git is a directory in normal clones and a file in worktrees/submodules.
+# -prune keeps find out of object databases.
+# shellcheck disable=SC2016
+find -- "${search_dir}" -name .git \( -type d -o -type f \) -prune -print0 |
+    xargs -0 -r -P "${jobs}" -I{} sh -c '
+        repo="${1%/.git}"
+        GIT_TERMINAL_PROMPT=0 git -C "${repo}" fetch --all --quiet </dev/null ||
+            { printf "git-fetch: failed: %s\n" "${repo}" >&2; exit 1; }
+    ' -- {}
