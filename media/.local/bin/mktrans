@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Floodfill an image's background with transparency, with an antialiased
+# (blurred and half-pixel eroded) alpha channel. Based on hackerb9's mktrans.
+
+set -o errexit -o nounset
+
+readonly DEFAULT_FUZZ=20
+readonly SUFFIX=-mktrans
+
+fuzz=${DEFAULT_FUZZ}
+speedy='' no_antialias='' pixel=''
+status=0
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [-f PERCENT] [-s|-S] [-p X,Y] FILE...
+  -f PERCENT  background color tolerance (default: ${DEFAULT_FUZZ})
+  -s          fast, lower-quality antialiasing
+  -S          no antialiasing (useful when the input already has alpha)
+  -p X,Y      floodfill from X,Y instead of the top-left pixel
+EOF
+}
+
+die() {
+    printf '%s: %s\n' "${0##*/}" "$*" >&2
+    exit 2
+}
+
+while getopts 'f:sSp:h' opt; do
+    case "${opt}" in
+        f) fuzz=${OPTARG} ;;
+        s) speedy=1 ;;
+        S) no_antialias=1 ;;
+        p) pixel=${OPTARG} ;;
+        h)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+(($# > 0)) || die "no input files"
+
+if [[ ! ${fuzz} =~ ^[0-9]+$ ]] || ((10#${fuzz} > 100)); then
+    die "fuzz must be 0-100"
+fi
+fuzz=$((10#${fuzz}))
+
+if [[ -n ${pixel} ]]; then
+    [[ ${pixel} =~ ^([0-9]+),([0-9]+)$ ]] || die "pixel must be X,Y"
+    pixel_comma=${pixel}
+    pixel_plus="+${BASH_REMATCH[1]}+${BASH_REMATCH[2]}"
+else
+    pixel_comma=0,0
+    pixel_plus=+0+0
+fi
+
+command -v magick >/dev/null || die "ImageMagick 7 (magick) is required"
+
+for file in "${@}"; do
+    if [[ ! -f ${file} ]]; then
+        printf '%s: not a file: %s\n' "${0##*/}" "${file}" >&2
+        status=1
+        continue
+    fi
+    if ! color=$(magick "${file}" -format "%[pixel:p{${pixel_comma}}]" info:-); then
+        printf '%s: cannot read image: %s\n' "${0##*/}" "${file}" >&2
+        status=1
+        continue
+    fi
+    if [[ ${color} == *rgba*",0)" ]]; then
+        color="${color%,0)},1)" # floodfill needs an opaque color
+    fi
+    if [[ ${color} == none ]]; then
+        printf '%s: pixel at %s is transparent: %s\n' \
+            "${0##*/}" "${pixel_comma}" "${file}" >&2
+        status=1
+        continue
+    fi
+
+    args=()
+    [[ -n ${pixel} ]] || args+=(-bordercolor "${color}" -border 1)
+    args+=('(' +clone -fuzz "${fuzz}%" -fill none
+        -floodfill "${pixel_plus}" "${color}" -alpha extract)
+    if [[ -z ${no_antialias} ]]; then
+        if [[ -z ${speedy} ]]; then
+            args+=(-geometry 200% -blur 0x0.5
+                -morphology erode square:1 -geometry 50%)
+        else
+            args+=(-blur 0x1 -level '50%,100%')
+        fi
+    fi
+    args+=(')' -compose CopyOpacity -composite)
+    [[ -n ${pixel} ]] || args+=(-shave 1)
+
+    base=${file##*/}
+    stem=${base%.*}
+    [[ -n ${stem} ]] || stem=${base}
+    out="${file%"${base}"}${stem}${SUFFIX}.png"
+
+    if magick "${file}" "${args[@]}" "${out}"; then
+        printf 'created: %s\n' "${out}"
+    else
+        printf '%s: failed: %s\n' "${0##*/}" "${file}" >&2
+        status=1
+    fi
+done
+exit "${status}"
