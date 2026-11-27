@@ -30,7 +30,9 @@
 | `admin/pve` | Proxmox VE 宿主机工具 | `pvehost-backup.sh` |
 | `admin/storage` | 磁盘与 ZFS 管理工具 | `wwn-ata-mapping.sh`, `zfs-release.sh` |
 | `pwsh` | Windows PowerShell 脚本 | `Invoke-Mpv-Grid.ps1`, `Invoke-Winget-Install.ps1` |
-| `manifests` | 示例清单 | `winget-packages.json` |
+| `ahk` | Windows AutoHotkey v2 脚本 | `MaxMonitorWorkArea.ahk` |
+| `manifests` | 示例与预设清单 | `winget-packages.json`, `k8s/rbac/readers.yaml` |
+| `docs` | 专题使用说明 | `k8s.md` |
 | `install` | 仓库自身远程安装工具 | `install.sh` (不参与安装) |
 
 ## Install
@@ -143,6 +145,9 @@ Windows 脚本目前只做人工维护, 不包含在 `just check` 中.
 
 - `k8s/.local/lib/kube-config-selector.sh` 由 `kc` alias `source`, 不直接执行;
   `just stow k8s` 后 alias 指向 `${HOME}/.local/lib/kube-config-selector.sh`.
+  更多 Kubernetes 脚本与 RBAC 清单用法见 [docs/k8s.md](./docs/k8s.md).
+- `ahk/MaxMonitorWorkArea.ahk` 为 AutoHotkey v2 脚本 (`Win+Shift+Up` 跨多显示器最大化当前窗口),
+  Windows 下可直接运行或放入 `shell:startup`.
 - `admin/net/conntrack-count.sh` 通常需要 root 或 `CAP_NET_ADMIN`.
 - `admin/pve/pvehost-backup.sh` 需要 root 与 Proxmox VE 环境;
   `admin/storage/zfs-release.sh` 需要 ZFS.
